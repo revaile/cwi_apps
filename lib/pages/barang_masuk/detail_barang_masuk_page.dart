@@ -1,29 +1,29 @@
+import 'package:cwi_apps/controller/barang_masuk_controller.dart';
 import 'package:cwi_apps/controller/barang_terjual_controller.dart';
-import 'package:cwi_apps/models/transaksi_model.dart';
 import 'package:cwi_apps/services/transaksi_service.dart';
 import 'package:cwi_apps/widgets/btn_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class DetailBarangTerjualPage extends StatelessWidget {
-  const DetailBarangTerjualPage({super.key});
+class DetailBarangMasukPage extends StatelessWidget {
+  const DetailBarangMasukPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final String id = ModalRoute.of(context)!.settings.arguments as String;
-    final controller = BarangTerjualController();
+    final controller = BarangMasukController();
 
     return Scaffold(
       backgroundColor: const Color(0xFFC6EFE7),
       appBar: AppBar(
-        title: const Text("Detail Barang Terjual"),
+        title: const Text("Detail Barang Masuk"),
         centerTitle: true,
         backgroundColor: Color(0xFFC6EFE7),
         elevation: 0,
       ),
 
       body: FutureBuilder(
-        future: controller.getBarangTerjual(),
+        future: controller.getBarangMasuk(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -137,8 +137,6 @@ class DetailBarangTerjualPage extends StatelessWidget {
                       _detailRow('Qty', '${item.jumlah}'),
                       _detailRow('Unit', 'Pcs'),
                       _detailRow('Total Harga', 'Rp $total', isBold: true),
-
-                      // _detailRow('Total Harga', 'Rp $total', isBold: true),
                     ],
                   ),
                 ),
@@ -150,10 +148,10 @@ class DetailBarangTerjualPage extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       BtnWidget(
-                        onTap: () async {
+                          onTap: () async {
                           final result = await Navigator.pushNamed(
                             context,
-                            '/edit-barang-terjual',
+                            '/edit-barang-masuk',
                             arguments: item.id,
                           );
 
@@ -161,7 +159,6 @@ class DetailBarangTerjualPage extends StatelessWidget {
                             Navigator.pop(context, true); // 🔥 TERUSKAN KE LIST
                           }
                         },
-
                         width: double.infinity,
                         height: 45,
                         text: "Edit Barang",
@@ -204,7 +201,7 @@ class DetailBarangTerjualPage extends StatelessWidget {
                               item.id,
                             );
 
-                            // 🔔 SNACKBAR SUKSES
+                            //  SNACKBAR SUKSES
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text("Barang berhasil dihapus"),

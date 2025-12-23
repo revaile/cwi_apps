@@ -5,15 +5,15 @@ import 'package:cwi_apps/services/transaksi_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class TambahBarangTerjualPage extends StatefulWidget {
-  const TambahBarangTerjualPage({super.key});
+class TambahBarangMasuk extends StatefulWidget {
+  const TambahBarangMasuk({super.key});
 
   @override
-  State<TambahBarangTerjualPage> createState() =>
-      _TambahBarangTerjualPageState();
+  State<TambahBarangMasuk> createState() =>
+      _TambahBarangMasukState();
 }
 
-class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
+class _TambahBarangMasukState extends State<TambahBarangMasuk> {
   final namaPembeliC = TextEditingController();
   String? selectedVia;
   final hargaC = TextEditingController();
@@ -75,18 +75,18 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
         namaPembeli: namaPembeliC.text,
         tanggal: pickedDate!,
         jumlah: int.tryParse(qtyC.text) ?? 0,
-        jenisTransaksi: 'keluar',
+        jenisTransaksi: 'masuk',
         via: selectedVia ?? '',
         harga: int.tryParse(hargaC.text) ?? 0,
       );
 
-      await TransaksiRepository().createBarangKeluar(transaksi);
+      await TransaksiRepository().createBarangMasuk(transaksi);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Transaksi berhasil disimpan")),
+        const SnackBar(content: Text("Barang masuk berhasil diTambahkan")),
       );
 
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -99,7 +99,7 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFC6EFE7),
       appBar: AppBar(
-        title: const Text("Tambah Barang Terjual"),
+        title: const Text("Tambah Barang Masuk"),
         centerTitle: true,
         backgroundColor: const Color(0xFFC6EFE7),
         elevation: 0,

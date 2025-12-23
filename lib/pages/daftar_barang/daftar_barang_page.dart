@@ -1,9 +1,35 @@
+import 'package:cwi_apps/controller/daftar_barang_controller.dart';
 import 'package:cwi_apps/widgets/btn_widget.dart';
 import 'package:cwi_apps/widgets/daftar_barang_card.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
-class DaftarBarang extends StatelessWidget {
+class DaftarBarang extends StatefulWidget {
   const DaftarBarang({super.key});
+
+  @override
+  State<DaftarBarang> createState() => _DaftarBarangState();
+}
+
+class _DaftarBarangState extends State<DaftarBarang> {
+  final controller = DaftarBarangController();
+  late Future future;
+
+  @override
+  void initState() {
+    super.initState();
+    future = controller.getAllBarang();
+  }
+
+  void refresh() {
+    setState(() {
+      future = controller.getAllBarang();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +38,7 @@ class DaftarBarang extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Daftar Barang"),
         centerTitle: true,
-        titleTextStyle: TextStyle(
+        titleTextStyle: const TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 22,
           color: Colors.black,
@@ -20,80 +46,99 @@ class DaftarBarang extends StatelessWidget {
         backgroundColor: Color(0xFFC6EFE7),
         elevation: 0,
       ),
+
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // LIST PRODUK
-              Column(
-                children: const [
-                  DaftarBarangCard(
-                    namaProduk: "Produk A",
-                    tanggalMasuk: "12-November-2025",
-                    qty: 250,
-                    unit: "Pcs",
-                  ),
-                  DaftarBarangCard(
-                    namaProduk: "Produk B",
-                    tanggalMasuk: "13-November-2025",
-                    qty: 120,
-                    unit: "Kg",
-                  ),
-                  DaftarBarangCard(
-                    namaProduk: "Produk C",
-                    tanggalMasuk: "15-November-2025",
-                    qty: 50,
-                    unit: "Dus",
-                  ),
-                  DaftarBarangCard(
-                    namaProduk: "Produk C",
-                    tanggalMasuk: "15-November-2025",
-                    qty: 50,
-                    unit: "Dus",
-                  ),
-                ],
+              /// ================= LIST PRODUK =================
+              FutureBuilder(
+                future: controller.getAllBarang(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+
+                  final data = snapshot.data!;
+
+                  if (data.isEmpty) {
+                    return const Center(child: Text("Belum ada barang"));
+                  }
+
+                  return Column(
+                    children: data.map((p) {
+                      final tanggal = DateFormat(
+                        'd MMMM yyyy',
+                        'id_ID',
+                      ).format(p.tanggalMasuk);
+
+                      return DaftarBarangCard(
+                        productId: p.id,
+                        namaProduk: p.name,
+                        imageUrl: p.imageUrl,
+                        tanggalMasuk: tanggal,
+                        qty: p.jumlah,
+                        unit: "Pcs",
+
+                        onOpenDetail: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/detail-barang',
+                            arguments: p.id,
+                          );
+                        },
+
+                        onRefresh: () {
+                          setState(() {}); // atau panggil ulang Future
+                        },
+                      );
+                    }).toList(),
+                  );
+                },
               ),
-              // button bawah
+
+              /// ================= BUTTON =================
               BtnWidget(
-                onTap: () {
-                  Navigator.pushNamed(context, '/tambah-barang');
+                onTap: () async {
+                  final result = await Navigator.pushNamed(
+                    context,
+                    '/tambah-barang',
+                  );
+
+                  if (result == true) {
+                    refresh(); // 🔥 UI UPDATE
+                  }
                 },
                 width: 350,
                 height: 40,
                 text: "Tambah Barang",
                 bgcolor: Colors.blue,
-                textstyle: TextStyle(
+                textstyle: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
                 isUpercase: true,
               ),
-              const SizedBox(height: 15),
-              BtnWidget(
-                onTap: () {},
-                width: 350,
-                height: 40,
-                text: "Downlowad PDF",
-                bgcolor: Colors.blue,
-                textstyle: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-                isUpercase: true,
-              ),
+
               const SizedBox(height: 15),
 
               BtnWidget(
-                onTap: () {},
-                // icon: Icons.add,
+                onTap: () async {
+                  final products = await controller.getAllBarang();
+                  await generatePdf(products);
+                },
                 width: 350,
                 height: 40,
-                text: "Save",
+                text: "Download PDF",
                 bgcolor: Colors.blue,
-                textstyle: TextStyle(
+                textstyle: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -106,4 +151,44 @@ class DaftarBarang extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> generatePdf(List products) async {
+  final pdf = pw.Document();
+
+  pdf.addPage(
+    pw.MultiPage(
+      build: (context) => [
+        pw.Center(
+          child: pw.Text(
+            "DAFTAR BARANG",
+            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+        pw.SizedBox(height: 15),
+
+        pw.Table.fromTextArray(
+          border: pw.TableBorder.all(),
+          cellAlignment: pw.Alignment.centerLeft,
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+          headers: ["No", "Nama Barang", "Tanggal Masuk", "Qty", "Unit"],
+          data: List.generate(
+            products.length,
+            (i) => [
+              "${i + 1}",
+              products[i].name,
+              DateFormat(
+                'd MMMM yyyy',
+                'id_ID',
+              ).format(products[i].tanggalMasuk),
+              products[i].jumlah.toString(),
+              "Pcs",
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  await Printing.layoutPdf(onLayout: (format) async => pdf.save());
 }

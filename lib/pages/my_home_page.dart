@@ -1,255 +1,339 @@
+import 'package:appwrite/models.dart' hide Row;
+import 'package:cwi_apps/services/appwrite_client.dart';
+import 'package:cwi_apps/services/transaksi_service.dart';
+import 'package:cwi_apps/services/user_services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-class MyHomePage extends StatelessWidget {
+class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  User? user;
+  bool loading = true;
+  int barangMasuk = 0;
+  int barangTerjual = 0;
+  String username = "";
+  List<FlSpot> chartKeluar = [];
+
+  final repo = TransaksiRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    getUser();
+    getData();
+    getUsername(); // 🔥 ambil username
+    getChartData(); // 🔥 ini chartnya
+  }
+
+  Future<void> getData() async {
+    final result = await repo.getStatistik();
+
+    setState(() {
+      barangMasuk = result['masuk']!;
+      barangTerjual = result['keluar']!;
+      loading = false;
+    });
+  }
+
+  Future<void> getUsername() async {
+    final profile = await UserServices().getUserProfile();
+    setState(() {
+      username = profile.username; // <-- dari field DB
+    });
+  }
+
+  Future<void> getUser() async {
+    try {
+      final data = await AppwriteService.account.get();
+      setState(() {
+        user = data;
+        loading = false;
+      });
+    } catch (e) {
+      setState(() => loading = false);
+    }
+  }
+
+  Future<void> getChartData() async {
+    final map = await repo.getChartBarangTerjual7Hari();
+
+    setState(() {
+      chartKeluar = map.entries
+          .map((e) => FlSpot(e.key.toDouble(), e.value.toDouble()))
+          .toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFC6EFE7),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // HEADER CARD
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // ===== TEXT LEFT =====
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Hi,",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await getUser(); // kalau ga perlu refresh user, boleh hapus
+            await getData(); // 🔥 ini refresh statistik
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // HEADER CARD
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // ===== TEXT LEFT =====
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Hi,",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          "Staff Gudang",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 4),
 
-                    // ===== RIGHT AREA =====
-                    Row(
-                      children: [
-                        const Text(
-                          "Admin",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                          Text(
+                            loading
+                                ? "Loading..."
+                                : (user?.name.isNotEmpty == true
+                                      ? user!.name
+                                      : user?.email ?? "User"),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
+                        ],
+                      ),
 
-                        // ===== FOTO PROFIL (TAPABLE) =====
-                        InkWell(
-                          onTap: () {
-                            Navigator.pushNamed(context, '/profil');
-                          },
-                          borderRadius: BorderRadius.circular(30),
-                          child: Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundColor: Colors.grey.shade300,
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
+                      // ===== RIGHT AREA =====
+                      Row(
+                        children: [
+                          Text(
+                            loading
+                                ? "Loading..."
+                                : (username.isNotEmpty ? username : "User"),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+
+                          const SizedBox(width: 10),
+
+                          // ===== FOTO PROFIL (TAPABLE) =====
+                          InkWell(
+                            onTap: () async {
+                              final result = await Navigator.pushNamed(
+                                context,
+                                '/profil',
+                              );
+
+                              if (result == true) {
+                                await getUser(); // 🔥 REFRESH USER
+                              }
+                            },
+
+                            borderRadius: BorderRadius.circular(30),
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: Colors.grey.shade300,
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                  ),
+                                  // backgroundImage: NetworkImage("https://foto-url"),
                                 ),
-                                // backgroundImage: NetworkImage("https://foto-url"),
+
+                                // // ===== STATUS DOT =====
+                                // Container(
+                                //   width: 10,
+                                //   height: 10,
+                                //   decoration: BoxDecoration(
+                                //     color: Colors.green,
+                                //     shape: BoxShape.circle,
+                                //     border: Border.all(
+                                //       color: Colors.white,
+                                //       width: 2,
+                                //     ),
+                                //   ),
+                                // ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // STATISTIC BOXES
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _statBox("$barangMasuk", "Barang Masuk"),
+                    _statBox("$barangTerjual", "Barang Terjual"),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // ===== CHART & STAT CARD =====
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+
+                      // CHART
+                      SizedBox(
+                        height: 180,
+                        child: LineChart(
+                          LineChartData(
+                            gridData: FlGridData(show: true),
+                            borderData: FlBorderData(show: false),
+                            titlesData: FlTitlesData(
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 28,
+                                ),
+                              ),
+                              rightTitles: AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              topTitles: AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  getTitlesWidget: (value, meta) {
+                                    const days = [
+                                      'Sun',
+                                      'Mon',
+                                      'Tue',
+                                      'Wed',
+                                      'Thu',
+                                      'Fri',
+                                      'Sat',
+                                    ];
+                                    return Text(
+                                      days[value.toInt() % 7],
+                                      style: const TextStyle(fontSize: 10),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots: chartKeluar.isEmpty
+                                    ? const [FlSpot(0, 0)]
+                                    : chartKeluar,
+                                isCurved: true,
+                                color: Colors.blue,
+                                barWidth: 3,
+                                dotData: FlDotData(show: false),
                               ),
 
-                              // // ===== STATUS DOT =====
-                              // Container(
-                              //   width: 10,
-                              //   height: 10,
-                              //   decoration: BoxDecoration(
-                              //     color: Colors.green,
-                              //     shape: BoxShape.circle,
-                              //     border: Border.all(
-                              //       color: Colors.white,
-                              //       width: 2,
-                              //     ),
-                              //   ),
-                              // ),
+                              LineChartBarData(
+                                spots: chartKeluar.isEmpty
+                                    ? const [FlSpot(0, 0)]
+                                    : chartKeluar,
+                                isCurved: true,
+                                color: Colors.blue,
+                                barWidth: 3,
+                                dotData: FlDotData(show: false),
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // STATISTIC BOXES
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _statBox("1.500", "Barang Masuk"),
-                  _statBox("5.000", "Barang Terjual"),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // ===== CHART & STAT CARD =====
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 16),
-
-                    // CHART
-                    SizedBox(
-                      height: 180,
-                      child: LineChart(
-                        LineChartData(
-                          gridData: FlGridData(show: true),
-                          borderData: FlBorderData(show: false),
-                          titlesData: FlTitlesData(
-                            leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                reservedSize: 28,
-                              ),
-                            ),
-                            rightTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            topTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                getTitlesWidget: (value, meta) {
-                                  const days = [
-                                    'Sun',
-                                    'Mon',
-                                    'Tue',
-                                    'Wed',
-                                    'Thu',
-                                    'Fri',
-                                    'Sat',
-                                  ];
-                                  return Text(
-                                    days[value.toInt() % 7],
-                                    style: const TextStyle(fontSize: 10),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          lineBarsData: [
-                            LineChartBarData(
-                              spots: const [
-                                FlSpot(0, 10),
-                                FlSpot(1, 15),
-                                FlSpot(2, 12),
-                                FlSpot(3, 25),
-                                FlSpot(4, 20),
-                                FlSpot(5, 18),
-                                FlSpot(6, 22),
-                              ],
-                              isCurved: true,
-                              color: Colors.blue,
-                              barWidth: 3,
-                              dotData: FlDotData(show: false),
-                            ),
-                            LineChartBarData(
-                              spots: const [
-                                FlSpot(0, 8),
-                                FlSpot(1, 10),
-                                FlSpot(2, 18),
-                                FlSpot(3, 15),
-                                FlSpot(4, 12),
-                                FlSpot(5, 14),
-                                FlSpot(6, 10),
-                              ],
-                              isCurved: true,
-                              color: Colors.cyan,
-                              barWidth: 3,
-                              dotData: FlDotData(show: false),
-                            ),
-                          ],
-                        ),
                       ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                const Text(
+                  "Menu Admin",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 10),
+
+                // MENU GRID
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _menuItem(
+                      image: 'assets/ic_chart.png',
+                      label: "Barang Masuk",
+                      onTap: () async {
+                        final result = await Navigator.pushNamed(
+                          context,
+                          '/barang-masuk',
+                        );
+                        if (result == true) {
+                          getData(); // 🔥 REFRESH STATISTIK
+                        }
+                      },
+                    ),
+                    _menuItem(
+                      image: 'assets/ic_slod_out.png',
+                      label: "Barang Terjual",
+                      onTap: () {
+                        Navigator.pushNamed(context, '/barang-terjual');
+                      },
+                    ),
+                    _menuItem(
+                      image: 'assets/ic_letter_love.png',
+                      label: "Daftar Barang",
+                      onTap: () {
+                        Navigator.pushNamed(context, '/daftar-barang');
+                      },
+                    ),
+                    _menuItem(
+                      image: 'assets/ic_letter_money.png',
+                      label: "Data Penjualan",
+                      onTap: () {
+                        Navigator.pushNamed(context, '/data-penjualan');
+                      },
                     ),
                   ],
                 ),
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                "Menu Admin",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 10),
-
-              // MENU GRID
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _menuItem(
-                    image: 'assets/ic_chart.png',
-                    label: "Barang Masuk",
-                    onTap: () {
-                      print("Barang Masuk diklik");
-                    },
-                  ),
-                  _menuItem(
-                    image: 'assets/ic_slod_out.png',
-                    label: "Barang Terjual",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/barang-terjual');
-                    },
-                  ),
-                  _menuItem(
-                    image: 'assets/ic_letter_love.png',
-                    label: "Daftar Barang",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/daftar-barang');
-                    },
-                  ),
-                  _menuItem(
-                    image: 'assets/ic_letter_money.png',
-                    label: "Data Penjualan",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/data-penjualan');
-                    },
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

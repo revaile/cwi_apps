@@ -5,45 +5,66 @@ import 'package:cwi_apps/services/transaksi_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class TambahBarangTerjualPage extends StatefulWidget {
-  const TambahBarangTerjualPage({super.key});
+class EditBarangMasuk extends StatefulWidget {
+  const EditBarangMasuk({super.key});
 
   @override
-  State<TambahBarangTerjualPage> createState() =>
-      _TambahBarangTerjualPageState();
+  State<EditBarangMasuk> createState() => _EditBarangMasukState();
 }
 
-class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
+class _EditBarangMasukState extends State<EditBarangMasuk> {
   final namaPembeliC = TextEditingController();
-  String? selectedVia;
   final hargaC = TextEditingController();
   final qtyC = TextEditingController();
   final tglC = TextEditingController();
 
+  String? selectedVia;
+  String? selectedProductId;
+
   DateTime? pickedDate;
 
-  String? selectedProductId;
   List<ProductModel> products = [];
+  TransaksiModel? transaksiData;
+
+  bool isReady = false;
 
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _init();
   }
 
-  Future<void> _loadProducts() async {
-    final repo = ProductRepository();
-    final data = await repo.getAllProducts();
+  Future<void> _init() async {
+    await _loadProducts();
+    await _loadTransaksi();
     setState(() {
-      products = data;
+      isReady = true;
     });
   }
 
+  Future<void> _loadProducts() async {
+    products = await ProductRepository().getAllProducts();
+  }
+
+  Future<void> _loadTransaksi() async {
+    final String id = ModalRoute.of(context)!.settings.arguments as String;
+    final data = await TransaksiRepository().getById(id);
+
+    transaksiData = data;
+
+    selectedProductId = data.productId;
+    namaPembeliC.text = data.namaPembeli;
+    qtyC.text = data.jumlah.toString();
+    hargaC.text = data.harga.toString(); // ⬅️ HARGA FIX
+    selectedVia = data.via;
+    pickedDate = data.tanggal;
+    tglC.text = DateFormat('d MMMM yyyy', 'id_ID').format(data.tanggal);
+  }
+
   Future<void> _pickDate() async {
-    final now = DateTime.now();
     final result = await showDatePicker(
       context: context,
-      initialDate: now,
+      initialDate: pickedDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
@@ -68,38 +89,40 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
       return;
     }
 
-    try {
-      final transaksi = TransaksiModel(
-        id: '',
-        productId: selectedProductId!,
-        namaPembeli: namaPembeliC.text,
-        tanggal: pickedDate!,
-        jumlah: int.tryParse(qtyC.text) ?? 0,
-        jenisTransaksi: 'keluar',
-        via: selectedVia ?? '',
-        harga: int.tryParse(hargaC.text) ?? 0,
-      );
+    final old = transaksiData!;
 
-      await TransaksiRepository().createBarangKeluar(transaksi);
+    final transaksi = TransaksiModel(
+      id: old.id,
+      productId: selectedProductId!,
+      namaPembeli: namaPembeliC.text,
+      tanggal: pickedDate!,
+      jumlah: int.parse(qtyC.text),
+      jenisTransaksi: 'masuk',
+      via: selectedVia!,
+      harga: int.parse(hargaC.text),
+    );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Transaksi berhasil disimpan")),
-      );
+    await TransaksiRepository().updateBarangMasuk(transaksi);
 
-      Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Gagal: $e")));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Berhasil diupdate")),
+    );
+
+    Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!isReady) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFC6EFE7),
       appBar: AppBar(
-        title: const Text("Tambah Barang Terjual"),
+        title: const Text("Edit Barang Masuk"),
         centerTitle: true,
         backgroundColor: const Color(0xFFC6EFE7),
         elevation: 0,
@@ -122,76 +145,58 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 18),
               _label("Nama Pembeli"),
               _input(controller: namaPembeliC, hint: "Masukan nama pembeli"),
 
               const SizedBox(height: 18),
               _label("Nama Produk"),
-
               DropdownButtonFormField<String>(
-                value: selectedProductId,
-                items: products.map((p) {
-                  return DropdownMenuItem(value: p.id, child: Text(p.name));
-                }).toList(),
+                value: products.any((p) => p.id == selectedProductId)
+                    ? selectedProductId
+                    : null,
+                items: products
+                    .map((p) =>
+                        DropdownMenuItem(value: p.id, child: Text(p.name)))
+                    .toList(),
                 onChanged: (v) {
-                  setState(() {
-                    selectedProductId = v;
-                    final selected = products.firstWhere(
-                      (element) => element.id == v,
-                    );
-                    hargaC.text = selected.harga.toString();
-                  });
+                  setState(() => selectedProductId = v);
                 },
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                decoration: _decoration(),
               ),
 
               const SizedBox(height: 18),
               _label("Transaksi via"),
               DropdownButtonFormField<String>(
-                value: selectedVia,
+                value: ["Tiktok", "Shopee", "Tokopedia", "Offline", "Lainnya"]
+                        .contains(selectedVia)
+                    ? selectedVia
+                    : null,
                 items: const [
                   DropdownMenuItem(value: "Tiktok", child: Text("Tiktok")),
                   DropdownMenuItem(value: "Shopee", child: Text("Shopee")),
                   DropdownMenuItem(
-                    value: "Tokopedia",
-                    child: Text("Tokopedia"),
-                  ),
+                      value: "Tokopedia", child: Text("Tokopedia")),
                   DropdownMenuItem(value: "Offline", child: Text("Offline")),
                   DropdownMenuItem(value: "Lainnya", child: Text("Lainnya")),
                 ],
-                onChanged: (v) {
-                  setState(() => selectedVia = v);
-                },
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                onChanged: (v) => setState(() => selectedVia = v),
+                decoration: _decoration(),
               ),
 
-              const SizedBox(height: 18),
-              _label("Harga Produk (Auto dari DB)"),
-              _input(
-                controller: hargaC,
-                hint: "Harga otomatis",
-                keyboard: TextInputType.number,
-                readOnly: true,
-              ),
+              // const SizedBox(height: 18),
+              // _label("Harga Produk"),
+              // _input(
+              //   controller: hargaC,
+              //   hint: "Harga otomatis",
+              //   keyboard: TextInputType.number,
+              //   readOnly: true,
+              // ),
 
               const SizedBox(height: 18),
               _label("Jumlah"),
               _input(
                 controller: qtyC,
-                hint: "Masukan jumlah terjual",
+                hint: "Masukan jumlah barang masuk",
                 keyboard: TextInputType.number,
               ),
 
@@ -201,15 +206,9 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
                 controller: tglC,
                 readOnly: true,
                 onTap: _pickDate,
-                decoration: InputDecoration(
-                  hintText: "Pilih tanggal...",
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  suffixIcon: const Icon(Icons.calendar_month),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+                decoration: _decoration(
+                  suffix: const Icon(Icons.calendar_month),
+                ).copyWith(hintText: "Pilih tanggal..."),
               ),
 
               const SizedBox(height: 28),
@@ -242,13 +241,22 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
     );
   }
 
+  InputDecoration _decoration({Widget? suffix}) {
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      suffixIcon: suffix,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+
   Widget _label(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text(
-      text,
-      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-    ),
-  );
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+      );
 
   Widget _input({
     required TextEditingController controller,
@@ -260,16 +268,7 @@ class _TambahBarangTerjualPageState extends State<TambahBarangTerjualPage> {
       controller: controller,
       readOnly: readOnly,
       keyboardType: keyboard,
-      decoration: InputDecoration(
-        hintText: hint,
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+      decoration: _decoration().copyWith(hintText: hint),
     );
   }
 }
